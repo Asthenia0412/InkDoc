@@ -29,6 +29,21 @@
 
 ---
 
+## 下载安装
+
+前往 [Releases](https://github.com/Asthenia0412/InkDoc/releases) 页面下载最新版本。
+
+| 芯片 | 文件 | 说明 |
+|---|---|---|
+| Apple Silicon (M1/M2/M3/M4) | `InkDoc_x.x.x_aarch64.dmg` | 推荐，性能更好 |
+| Intel | `InkDoc_x.x.x_x64.dmg` | Intel Mac 使用 |
+
+安装方式：下载 `.dmg` 文件 → 双击打开 → 将 InkDoc 拖入 Applications 文件夹。
+
+> ⚠️ macOS 可能提示"无法验证开发者"，请前往 **系统设置 → 隐私与安全性 → 仍要打开**。
+
+---
+
 ## 特性
 
 - **所见即所得编辑** — 基于 Milkdown（ProseMirror + Remark），点击即编辑，无需切换模式
