@@ -172,17 +172,24 @@ html, body, #root {
 
 /* 列表 */
 .milkdown-editor .ProseMirror ul {
-  padding-left: 20px;
+  padding-left: 16px;
   margin: 8px 0;
 }
 
 .milkdown-editor .ProseMirror ol {
-  padding-left: 24px;
+  padding-left: 20px;
   margin: 8px 0;
 }
 
 .milkdown-editor .ProseMirror li {
   margin-bottom: 4px;
+}
+
+/* 嵌套列表：紧凑缩进 */
+.milkdown-editor .ProseMirror li ul,
+.milkdown-editor .ProseMirror li ol {
+  padding-left: 8px;
+  margin: 2px 0;
 }
 
 .milkdown-editor .ProseMirror li:hover {

@@ -47,6 +47,25 @@ export async function startFileWatcher(dirPath: string): Promise<string> {
   return invoke<string>("start_file_watcher", { dirPath });
 }
 
+/** 检测目录是否是 Git 仓库 */
+export async function checkGitRepo(dirPath: string): Promise<boolean> {
+  return invoke<boolean>("check_git_repo", { dirPath });
+}
+
+/** 获取 Git 仓库信息 */
+export async function getGitInfo(dirPath: string): Promise<{
+  isGitRepo: boolean;
+  branch: string;
+  remoteUrl: string;
+}> {
+  return invoke("get_git_info", { dirPath });
+}
+
+/** 执行自动 commit + push */
+export async function gitAutoPush(dirPath: string, commitMessage: string): Promise<string> {
+  return invoke<string>("git_auto_push", { dirPath, commitMessage });
+}
+
 /** 监听文件变更事件 */
 export async function onFileChange(
   callback: (event: { path: string; kind: string }) => void,

@@ -189,18 +189,18 @@ export function InlineInput({ state, onCancel, depth }: InlineInputProps) {
     return state.type === "file" ? "untitled.md" : "新建文件夹";
   });
 
-  // 自动聚焦并选中
+  // 自动聚焦并选中（只在挂载时执行一次）
   useEffect(() => {
     if (!inputRef.current) return;
     inputRef.current.focus();
     if (state.type === "rename") {
-      // 重命名时只选中文件名部分（不含扩展名）
       const dotIndex = value.lastIndexOf(".");
       inputRef.current.setSelectionRange(0, dotIndex > 0 ? dotIndex : value.length);
     } else {
       inputRef.current.select();
     }
-  }, [state.type, value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = value.trim();
@@ -248,8 +248,9 @@ export function InlineInput({ state, onCancel, depth }: InlineInputProps) {
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleSubmit}
-        className="flex-1 min-w-0 h-6 px-1.5 text-[13px] rounded
+        className="flex-1 min-w-[120px] h-6 px-1.5 text-[13px] rounded
           border border-[#3370ff] bg-white text-[#1f2329]
+          font-sans
           focus:outline-none focus:ring-1 focus:ring-[#3370ff]/30"
       />
     </div>

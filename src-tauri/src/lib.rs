@@ -17,6 +17,9 @@ pub fn run() {
             commands::delete_item,
             commands::rename_item,
             commands::start_file_watcher,
+            commands::check_git_repo,
+            commands::get_git_info,
+            commands::git_auto_push,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

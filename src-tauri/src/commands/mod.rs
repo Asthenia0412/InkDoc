@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter};
 use std::path::PathBuf;
 
 use crate::types::{Block, FileNode, FileOperationResult, WriteFileRequest};
-use crate::services::{file_system, markdown};
+use crate::services::{file_system, markdown, git};
 
 /// 读取文件夹树
 #[tauri::command]
@@ -163,4 +163,33 @@ pub fn start_file_watcher(app: AppHandle, dir_path: String) -> Result<String, St
     });
 
     Ok(format!("Watching: {}", dir_path))
+}
+
+/// 检测目录是否是 Git 仓库
+#[tauri::command]
+pub fn check_git_repo(dir_path: String) -> Result<bool, String> {
+    Ok(git::is_git_repo(&dir_path))
+}
+
+/// 获取 Git 仓库信息（分支 + remote URL）
+#[tauri::command]
+pub fn get_git_info(dir_path: String) -> Result<serde_json::Value, String> {
+    if !git::is_git_repo(&dir_path) {
+        return Err("Not a git repository".to_string());
+    }
+
+    let branch = git::get_current_branch(&dir_path)?;
+    let remote_url = git::get_remote_url(&dir_path).unwrap_or_default();
+
+    Ok(serde_json::json!({
+        "isGitRepo": true,
+        "branch": branch,
+        "remoteUrl": remote_url,
+    }))
+}
+
+/// 执行自动 commit + push
+#[tauri::command]
+pub fn git_auto_push(dir_path: String, commit_message: String) -> Result<String, String> {
+    git::auto_commit_push(&dir_path, &commit_message)
 }

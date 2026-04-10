@@ -120,7 +120,7 @@ export function MarkdownView() {
       <div className="flex-1 overflow-y-auto">
         <div
           ref={editorRef}
-          className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
+          className="milkdown-editor max-w-[750px] mx-auto px-4 py-8 min-h-full"
         />
       </div>
     </div>
