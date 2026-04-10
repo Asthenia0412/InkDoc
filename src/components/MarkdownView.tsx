@@ -63,7 +63,12 @@ function fixRelativeImagePaths(editorDom: Element) {
       .join("/");
 
     try {
-      const assetUrl = convertFileSrc(normalized);
+      // 对路径中的每个 segment 分别编码（保留 / 分隔符）
+      const encoded = normalized
+        .split("/")
+        .map((segment) => encodeURIComponent(segment))
+        .join("/");
+      const assetUrl = convertFileSrc(encoded);
       img.setAttribute("src", assetUrl);
     } catch {
       // 转换失败，保持原样
@@ -298,31 +303,33 @@ export function MarkdownView() {
       />
 
       {/* 右侧编辑区 */}
-      <div className="flex-1 overflow-y-auto relative" ref={scrollContainerRef}>
-        {/* 搜索替换面板 */}
-        {searchOpen && (
-          <SearchReplacePanel onClose={() => setSearchOpen(false)} />
-        )}
+      <div className="flex-1 relative">
+        <div className="h-full overflow-y-auto" ref={scrollContainerRef}>
+          {/* 搜索替换面板 */}
+          {searchOpen && (
+            <SearchReplacePanel onClose={() => setSearchOpen(false)} />
+          )}
 
-        {/* 源码模式 */}
-        {sourceMode ? (
-          <textarea
-            value={sourceText}
-            onChange={handleSourceChange}
-            spellCheck={false}
-            className="w-full h-full max-w-[750px] mx-auto px-6 py-8 bg-transparent
-              text-[14px] leading-relaxed text-[#1f2329] font-mono
-              resize-none outline-none border-none"
-            placeholder="Markdown 源码..."
-          />
-        ) : (
-          <div
-            ref={editorRef}
-            className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
-          />
-        )}
+          {/* 源码模式 */}
+          {sourceMode ? (
+            <textarea
+              value={sourceText}
+              onChange={handleSourceChange}
+              spellCheck={false}
+              className="w-full h-full max-w-[750px] mx-auto px-6 py-8 bg-transparent
+                text-[14px] leading-relaxed text-[#1f2329] font-mono
+                resize-none outline-none border-none"
+              placeholder="Markdown 源码..."
+            />
+          ) : (
+            <div
+              ref={editorRef}
+              className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
+            />
+          )}
+        </div>
 
-        {/* 右下角模式切换按钮 */}
+        {/* 右下角模式切换按钮（固定在编辑区右下角，不随内容滚动） */}
         <button
           onClick={toggleSourceMode}
           className="absolute bottom-3 right-3 z-30 flex items-center gap-1.5
