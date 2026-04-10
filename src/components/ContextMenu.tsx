@@ -4,6 +4,9 @@ import {
   FolderPlus,
   Trash2,
   Pencil,
+  FileText,
+  FolderTree,
+  Link,
 } from "lucide-react";
 import type { FileNode } from "@/types";
 import { useEditorStore } from "@/stores/editor";
@@ -99,6 +102,26 @@ export function ContextMenu({ state, onClose }: ContextMenuProps) {
     await deleteFileItem(state.targetNode.path);
   }, [state.targetNode, onClose, deleteFileItem]);
 
+  const handleCopyName = useCallback(() => {
+    if (!state.targetNode) return;
+    onClose();
+    navigator.clipboard.writeText(state.targetNode.name);
+  }, [state.targetNode, onClose]);
+
+  const handleCopyRelativePath = useCallback(() => {
+    if (!state.targetNode || !useEditorStore.getState().rootPath) return;
+    onClose();
+    const root = useEditorStore.getState().rootPath!;
+    const relative = state.targetNode.path.replace(root + "/", "");
+    navigator.clipboard.writeText(relative);
+  }, [state.targetNode, onClose]);
+
+  const handleCopyAbsolutePath = useCallback(() => {
+    if (!state.targetNode) return;
+    onClose();
+    navigator.clipboard.writeText(state.targetNode.path);
+  }, [state.targetNode, onClose]);
+
   if (!state.containerPath) return null;
 
   const isFolder = state.targetNode?.type === "folder";
@@ -133,6 +156,38 @@ export function ContextMenu({ state, onClose }: ContextMenuProps) {
       {/* 分隔线 — 仅对文件/文件夹显示 */}
       {(isFile || isFolder) && (
         <div className="my-1 border-t border-[#dee0e3]" />
+      )}
+
+      {/* 复制子菜单 — 仅对文件/文件夹显示 */}
+      {(isFile || isFolder) && (
+        <>
+          <button
+            onClick={handleCopyName}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-[#1f2329]
+              hover:bg-[#f0f5ff] transition-colors cursor-pointer"
+          >
+            <FileText size={14} className="text-[#8f959e]" />
+            <span>复制名称</span>
+            <span className="ml-auto text-[11px] text-[#c0c4cc]">{state.targetNode?.name}</span>
+          </button>
+          <button
+            onClick={handleCopyRelativePath}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-[#1f2329]
+              hover:bg-[#f0f5ff] transition-colors cursor-pointer"
+          >
+            <FolderTree size={14} className="text-[#8f959e]" />
+            <span>复制相对路径</span>
+          </button>
+          <button
+            onClick={handleCopyAbsolutePath}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-[#1f2329]
+              hover:bg-[#f0f5ff] transition-colors cursor-pointer"
+          >
+            <Link size={14} className="text-[#8f959e]" />
+            <span>复制绝对路径</span>
+          </button>
+          <div className="my-1 border-t border-[#dee0e3]" />
+        </>
       )}
 
       {/* 重命名 — 仅对文件/文件夹显示 */}

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { Code, Eye } from "lucide-react";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import { useEditorStore } from "@/stores/editor";
@@ -30,6 +32,62 @@ function isMarkdownContent(text: string): boolean {
   return score >= 2;
 }
 
+/** 将编辑器中相对路径的图片转为 asset:// 协议的绝对路径 */
+function fixRelativeImagePaths(editorDom: Element) {
+  const filePath = useEditorStore.getState().currentFilePath;
+  if (!filePath) return;
+
+  // 当前文件所在目录
+  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+
+  const images = editorDom.querySelectorAll("img[src]");
+  images.forEach((img) => {
+    const src = img.getAttribute("src");
+    if (!src) return;
+
+    // 已经是绝对路径或 http(s) 或 asset:// 协议，跳过
+    if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("asset://") || src.startsWith("data:") || src.startsWith("/")) {
+      return;
+    }
+
+    // 相对路径 → 拼接为绝对路径 → 转为 asset:// URL
+    const absolutePath = dir + "/" + src;
+    // 规范化路径（处理 ./ 和 ../）
+    const normalized = absolutePath
+      .split("/")
+      .reduce((acc: string[], part) => {
+        if (part === "..") acc.pop();
+        else if (part !== ".") acc.push(part);
+        return acc;
+      }, [])
+      .join("/");
+
+    try {
+      const assetUrl = convertFileSrc(normalized);
+      img.setAttribute("src", assetUrl);
+    } catch {
+      // 转换失败，保持原样
+    }
+  });
+
+  // 监听 DOM 变化，新插入的图片也需要转换
+  const observer = new MutationObserver((mutations) => {
+    let hasNewImages = false;
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node instanceof HTMLImageElement) hasNewImages = true;
+        if (node instanceof Element && node.querySelector("img")) hasNewImages = true;
+      }
+    }
+    if (hasNewImages) {
+      // 延迟执行，等 ProseMirror 完成渲染
+      setTimeout(() => fixRelativeImagePaths(editorDom), 100);
+    }
+  });
+
+  observer.observe(editorDom, { childList: true, subtree: true });
+}
+
 /** Milkdown 所见即所得编辑器（飞书风格） */
 export function MarkdownView() {
   const { markdownContent, currentFilePath, updateMarkdown, saveCurrentFile } = useEditorStore();
@@ -39,6 +97,10 @@ export function MarkdownView() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markdownContentRef = useRef(markdownContent);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sourceMode, setSourceMode] = useState(false);
+  const [sourceText, setSourceText] = useState("");
+  const [rebuildTrigger, setRebuildTrigger] = useState(0);
+  const sourceSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 保持 markdownContent 的 ref 同步（避免闭包陷阱）
   useEffect(() => {
@@ -78,6 +140,9 @@ export function MarkdownView() {
 
         // 粘贴 Markdown 自动渲染
         dom.addEventListener("paste", handlePaste as EventListener);
+
+        // 修复相对路径图片
+        fixRelativeImagePaths(dom);
       }
     });
 
@@ -147,7 +212,7 @@ export function MarkdownView() {
         crepeRef.current = null;
       }
     };
-  }, [currentFilePath]); // 文件切换时重建编辑器
+  }, [currentFilePath, rebuildTrigger]); // 文件切换或源码模式退出时重建编辑器
 
   // Cmd+S 保存 + Cmd+F 搜索
   useEffect(() => {
@@ -172,8 +237,38 @@ export function MarkdownView() {
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (sourceSaveTimerRef.current) clearTimeout(sourceSaveTimerRef.current);
     };
   }, []);
+
+  // 切换到源码模式时，同步当前 Markdown 内容
+  const toggleSourceMode = useCallback(() => {
+    if (!sourceMode) {
+      // 进入源码模式：从编辑器获取最新 Markdown
+      let md = markdownContent;
+      if (crepeRef.current) {
+        try { md = crepeRef.current.getMarkdown(); } catch { /* ignore */ }
+      }
+      setSourceText(md);
+    } else {
+        // 退出源码模式：更新内容并触发编辑器重建
+        updateMarkdown(sourceText);
+        markdownContentRef.current = sourceText;
+        setRebuildTrigger((n) => n + 1);
+      }
+    setSourceMode(!sourceMode);
+  }, [sourceMode, markdownContent, sourceText, updateMarkdown]);
+
+  // 源码模式下的内容变化 → 防抖保存
+  const handleSourceChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setSourceText(text);
+    updateMarkdown(text);
+    if (sourceSaveTimerRef.current) clearTimeout(sourceSaveTimerRef.current);
+    sourceSaveTimerRef.current = setTimeout(() => {
+      saveCurrentFile();
+    }, 1000);
+  }, [updateMarkdown, saveCurrentFile]);
 
   // 空状态
   if (!currentFilePath) {
@@ -208,10 +303,46 @@ export function MarkdownView() {
         {searchOpen && (
           <SearchReplacePanel onClose={() => setSearchOpen(false)} />
         )}
-        <div
-          ref={editorRef}
-          className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
-        />
+
+        {/* 源码模式 */}
+        {sourceMode ? (
+          <textarea
+            value={sourceText}
+            onChange={handleSourceChange}
+            spellCheck={false}
+            className="w-full h-full max-w-[750px] mx-auto px-6 py-8 bg-transparent
+              text-[14px] leading-relaxed text-[#1f2329] font-mono
+              resize-none outline-none border-none"
+            placeholder="Markdown 源码..."
+          />
+        ) : (
+          <div
+            ref={editorRef}
+            className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
+          />
+        )}
+
+        {/* 右下角模式切换按钮 */}
+        <button
+          onClick={toggleSourceMode}
+          className="absolute bottom-3 right-3 z-30 flex items-center gap-1.5
+            h-8 px-3 rounded-lg border border-[#dee0e3] bg-white/90 backdrop-blur-sm
+            text-[12px] text-[#646a73] hover:bg-[#f0f1f2] hover:text-[#1f2329]
+            shadow-sm transition-colors"
+          title={sourceMode ? "切换到富文本模式" : "切换到源码模式"}
+        >
+          {sourceMode ? (
+            <>
+              <Eye size={14} />
+              <span>预览</span>
+            </>
+          ) : (
+            <>
+              <Code size={14} />
+              <span>源码</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
