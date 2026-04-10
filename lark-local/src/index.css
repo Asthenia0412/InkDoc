@@ -26,15 +26,14 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.12);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-/* 选中文本颜色 */
 ::selection {
   background: rgba(51, 112, 255, 0.2);
 }
@@ -48,4 +47,224 @@ html, body, #root {
 [data-tauri-drag-region] a,
 [data-tauri-drag-region] input {
   -webkit-app-region: no-drag;
+}
+
+/* ============================================
+   Milkdown 飞书风格覆盖
+   ============================================ */
+.milkdown-editor .ProseMirror {
+  color: #1f2329;
+  font-size: 15px;
+  line-height: 1.75;
+  outline: none;
+  min-height: 100%;
+  padding: 8px 0;
+}
+
+/* 标题 */
+.milkdown-editor .ProseMirror h1 {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 32px;
+  margin-bottom: 16px;
+  color: #1f2329;
+}
+
+.milkdown-editor .ProseMirror h2 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 28px;
+  margin-bottom: 12px;
+  color: #1f2329;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee0e3;
+}
+
+.milkdown-editor .ProseMirror h3 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 24px;
+  margin-bottom: 8px;
+  color: #1f2329;
+}
+
+.milkdown-editor .ProseMirror h4 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  color: #1f2329;
+}
+
+.milkdown-editor .ProseMirror h5,
+.milkdown-editor .ProseMirror h6 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  color: #646a73;
+}
+
+/* 段落 */
+.milkdown-editor .ProseMirror p {
+  margin-bottom: 12px;
+}
+
+/* 链接 */
+.milkdown-editor .ProseMirror a {
+  color: #3370ff;
+  text-decoration: none;
+}
+
+.milkdown-editor .ProseMirror a:hover {
+  text-decoration: underline;
+}
+
+/* 加粗 */
+.milkdown-editor .ProseMirror strong {
+  font-weight: 600;
+  color: #1f2329;
+}
+
+/* 行内代码 */
+.milkdown-editor .ProseMirror code {
+  background: #f2f3f5;
+  color: #d6493c;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+/* 代码块 */
+.milkdown-editor .ProseMirror pre {
+  background: #f7f8fa;
+  border: 1px solid #dee0e3;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  overflow-x: auto;
+}
+
+.milkdown-editor .ProseMirror pre code {
+  background: transparent;
+  color: #1f2329;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* 引用块 */
+.milkdown-editor .ProseMirror blockquote {
+  border-left: 3px solid #3370ff;
+  background: #f0f5ff;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  color: #646a73;
+}
+
+/* 列表 */
+.milkdown-editor .ProseMirror ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.milkdown-editor .ProseMirror ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.milkdown-editor .ProseMirror li {
+  margin-bottom: 4px;
+}
+
+.milkdown-editor .ProseMirror li:hover {
+  background: #f5f6f7;
+  border-radius: 4px;
+}
+
+/* 分隔线 */
+.milkdown-editor .ProseMirror hr {
+  border: none;
+  border-top: 1px solid #dee0e3;
+  margin: 32px 0;
+}
+
+/* 图片 */
+.milkdown-editor .ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+/* 表格 */
+.milkdown-editor .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.milkdown-editor .ProseMirror th {
+  background: #f5f6f7;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid #dee0e3;
+}
+
+.milkdown-editor .ProseMirror td {
+  padding: 10px 12px;
+  border: 1px solid #dee0e3;
+}
+
+.milkdown-editor .ProseMirror tr:hover td {
+  background: #f5f6f7;
+}
+
+/* 删除线 */
+.milkdown-editor .ProseMirror del,
+.milkdown-editor .ProseMirror s {
+  color: #8f959e;
+}
+
+/* 任务列表 */
+.milkdown-editor .ProseMirror input[type="checkbox"] {
+  margin-right: 6px;
+  accent-color: #3370ff;
+}
+
+/* 光标 — 加粗加深，更醒目 */
+.milkdown-editor .ProseMirror {
+  caret-color: #3370ff;
+}
+
+.milkdown-editor .ProseMirror * {
+  caret-color: #3370ff;
+}
+
+/* 光标和选区 */
+.milkdown-editor .ProseMirror ::selection {
+  background: rgba(51, 112, 255, 0.2);
+}
+
+/* ProseMirror 聚焦时显示清晰光标 */
+.milkdown-editor .ProseMirror:focus {
+  outline: none;
+}
+
+/* 占位符 */
+.milkdown-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: #c0c4cc;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }

@@ -64,6 +64,7 @@ pub enum Block {
     },
 }
 
+#[allow(dead_code)]
 impl Block {
     /// 获取 Block 的 ID
     pub fn id(&self) -> &str {

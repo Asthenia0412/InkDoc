@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { FileNode, Block } from "@/types";
-import { readFolder, readAndParseFile, startFileWatcher, onFileChange } from "@/lib/tauri-api";
+import type { FileNode } from "@/types";
+import { readFolder, readFileRaw, writeFile, startFileWatcher, onFileChange } from "@/lib/tauri-api";
 
 interface EditorState {
   /** 根文件夹路径 */
@@ -9,10 +9,8 @@ interface EditorState {
   fileTree: FileNode[];
   /** 当前打开的文件路径 */
   currentFilePath: string | null;
-  /** 当前文件的 Block 列表 */
-  blocks: Block[];
-  /** 当前文件的原始 Markdown */
-  rawContent: string;
+  /** 当前文件的原始 Markdown 文本 */
+  markdownContent: string;
   /** 加载状态 */
   loading: boolean;
   /** 错误信息 */
@@ -26,8 +24,8 @@ interface EditorState {
   toggleFolder: (path: string) => Promise<void>;
   refreshTree: () => Promise<void>;
   toggleSidebar: () => void;
-  setBlocks: (blocks: Block[]) => void;
-  setRawContent: (content: string) => void;
+  updateMarkdown: (content: string) => void;
+  saveCurrentFile: () => Promise<void>;
   setError: (error: string | null) => void;
 }
 
@@ -35,8 +33,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   rootPath: null,
   fileTree: [],
   currentFilePath: null,
-  blocks: [],
-  rawContent: "",
+  markdownContent: "",
   loading: false,
   error: null,
   sidebarVisible: true,
@@ -50,7 +47,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // 启动文件监听
       startFileWatcher(path).then(() => {
         onFileChange(async (event) => {
-          // 文件变更时刷新文件树
           const { rootPath: currentRoot } = get();
           if (currentRoot) {
             try {
@@ -76,11 +72,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   openFile: async (path: string) => {
     set({ loading: true, error: null });
     try {
-      const blocks = await readAndParseFile(path);
+      const content = await readFileRaw(path);
       set({
         currentFilePath: path,
-        blocks,
-        rawContent: "",
+        markdownContent: content,
         loading: false,
       });
     } catch (e) {
@@ -120,7 +115,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ sidebarVisible: !get().sidebarVisible });
   },
 
-  setBlocks: (blocks: Block[]) => set({ blocks }),
-  setRawContent: (content: string) => set({ rawContent: content }),
+  updateMarkdown: (content: string) => set({ markdownContent: content }),
+
+  saveCurrentFile: async () => {
+    const { currentFilePath, markdownContent } = get();
+    if (!currentFilePath) return;
+    try {
+      await writeFile({ path: currentFilePath, content: markdownContent });
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
   setError: (error: string | null) => set({ error }),
 }));
