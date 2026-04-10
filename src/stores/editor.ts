@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type { FileNode } from "@/types";
-import { readFolder, readFileRaw, writeFile, startFileWatcher, onFileChange } from "@/lib/tauri-api";
+import {
+  readFolder, readFileRaw, writeFile, startFileWatcher, onFileChange,
+  createFile, createFolder, deleteItem, renameItem,
+} from "@/lib/tauri-api";
 
 interface EditorState {
   /** 根文件夹路径 */
@@ -27,6 +30,13 @@ interface EditorState {
   updateMarkdown: (content: string) => void;
   saveCurrentFile: () => Promise<void>;
   setError: (error: string | null) => void;
+
+  // 文件操作
+  createNewFile: (parentPath: string, name: string) => Promise<void>;
+  createNewFolder: (parentPath: string, name: string) => Promise<void>;
+  deleteFileItem: (path: string) => Promise<void>;
+  renameFileItem: (oldPath: string, newName: string) => Promise<void>;
+  ensureFolderExpanded: (folderPath: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -57,8 +67,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
           }
 
-          // 如果当前打开的文件被修改，重新加载
+          // 如果当前打开的文件被删除，关闭编辑器
           const { currentFilePath } = get();
+          if (currentFilePath && event.path === currentFilePath && event.kind === "deleted") {
+            set({ currentFilePath: null, markdownContent: "" });
+          }
+          // 如果当前打开的文件被外部修改，重新加载
           if (currentFilePath && event.path === currentFilePath && event.kind === "modified") {
             get().openFile(currentFilePath);
           }
@@ -128,4 +142,81 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setError: (error: string | null) => set({ error }),
+
+  // === 文件操作 ===
+
+  createNewFile: async (parentPath: string, name: string) => {
+    const filePath = `${parentPath}/${name}`;
+    const result = await createFile(filePath);
+    if (!result.success) {
+      set({ error: result.message });
+      return;
+    }
+    // 确保父文件夹展开
+    get().ensureFolderExpanded(parentPath);
+    await get().refreshTree();
+    // 自动打开新文件
+    await get().openFile(filePath);
+  },
+
+  createNewFolder: async (parentPath: string, name: string) => {
+    const folderPath = `${parentPath}/${name}`;
+    const result = await createFolder(folderPath);
+    if (!result.success) {
+      set({ error: result.message });
+      return;
+    }
+    get().ensureFolderExpanded(parentPath);
+    await get().refreshTree();
+  },
+
+  deleteFileItem: async (path: string) => {
+    const result = await deleteItem(path);
+    if (!result.success) {
+      set({ error: result.message });
+      return;
+    }
+    // 如果删除的是当前打开的文件，关闭编辑器
+    const { currentFilePath } = get();
+    if (currentFilePath === path) {
+      set({ currentFilePath: null, markdownContent: "" });
+    }
+    await get().refreshTree();
+  },
+
+  renameFileItem: async (oldPath: string, newName: string) => {
+    const lastSlash = oldPath.lastIndexOf("/");
+    const parentPath = oldPath.substring(0, lastSlash);
+    const newPath = `${parentPath}/${newName}`;
+    const result = await renameItem(oldPath, newPath);
+    if (!result.success) {
+      set({ error: result.message });
+      return;
+    }
+    // 如果重命名的是当前打开的文件，更新路径
+    const { currentFilePath } = get();
+    if (currentFilePath === oldPath) {
+      set({ currentFilePath: newPath });
+    }
+    await get().refreshTree();
+  },
+
+  /** 确保指定文件夹在树中展开 */
+  ensureFolderExpanded: (folderPath: string) => {
+    const expandInTree = (nodes: FileNode[]): FileNode[] => {
+      return nodes.map((node) => {
+        if (node.type === "folder") {
+          const shouldExpand = node.path === folderPath ||
+            node.path.startsWith(folderPath + "/");
+          return {
+            ...node,
+            isExpanded: shouldExpand || node.isExpanded,
+            children: expandInTree(node.children),
+          };
+        }
+        return node;
+      });
+    };
+    set({ fileTree: expandInTree(get().fileTree) });
+  },
 }));

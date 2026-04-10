@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -10,10 +10,17 @@ import {
 } from "lucide-react";
 import type { FileNode } from "@/types";
 import { useEditorStore } from "@/stores/editor";
+import {
+  ContextMenu,
+  type ContextMenuState,
+  InlineInput,
+  type InlineInputState,
+} from "@/components/ContextMenu";
 
 interface TreeNodeProps {
   node: FileNode;
   depth: number;
+  onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
 }
 
 /** 文件名去掉扩展名 */
@@ -32,34 +39,23 @@ function isMarkdownFile(node: FileNode): boolean {
   return ext === "md" || ext === "markdown" || ext === "mdx";
 }
 
-/** 递归过滤文件树：匹配的文件保留，包含匹配文件的文件夹保留并自动展开 */
+/** 递归过滤文件树 */
 function filterTree(nodes: FileNode[], keyword: string): FileNode[] {
   if (!keyword) return nodes;
   const lower = keyword.toLowerCase();
 
   return nodes.reduce<FileNode[]>((acc, node) => {
     if (node.type === "file") {
-      // 匹配文件名（去掉扩展名后匹配）
       if (getDisplayName(node.name).toLowerCase().includes(lower)) {
         acc.push(node);
       }
     } else if (node.type === "folder") {
-      // 递归过滤子节点
       const filteredChildren = filterTree(node.children, keyword);
       if (filteredChildren.length > 0) {
-        // 包含匹配子项的文件夹自动展开
-        acc.push({
-          ...node,
-          children: filteredChildren,
-          isExpanded: true,
-        });
+        acc.push({ ...node, children: filteredChildren, isExpanded: true });
       }
-      // 也匹配文件夹名本身
       if (node.name.toLowerCase().includes(lower) && filteredChildren.length === 0) {
-        acc.push({
-          ...node,
-          isExpanded: true,
-        });
+        acc.push({ ...node, isExpanded: true });
       }
     }
     return acc;
@@ -67,7 +63,7 @@ function filterTree(nodes: FileNode[], keyword: string): FileNode[] {
 }
 
 /** 单个树节点 */
-function TreeNode({ node, depth }: TreeNodeProps) {
+function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
   const { openFile, toggleFolder, currentFilePath } = useEditorStore();
 
   const handleClick = useCallback(() => {
@@ -78,13 +74,13 @@ function TreeNode({ node, depth }: TreeNodeProps) {
     }
   }, [node, openFile, toggleFolder]);
 
-  const isActive =
-    node.type === "file" && node.path === currentFilePath;
+  const isActive = node.type === "file" && node.path === currentFilePath;
 
   if (node.type === "file") {
     return (
       <button
         onClick={handleClick}
+        onContextMenu={(e) => onContextMenu(e, node)}
         className={`
           w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md
           transition-colors duration-150 cursor-pointer
@@ -102,11 +98,11 @@ function TreeNode({ node, depth }: TreeNodeProps) {
     );
   }
 
-  // Folder
   return (
     <div>
       <button
         onClick={handleClick}
+        onContextMenu={(e) => onContextMenu(e, node)}
         className="w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md
           transition-colors duration-150 cursor-pointer
           text-feishu-text hover:bg-feishu-hover font-medium"
@@ -128,7 +124,7 @@ function TreeNode({ node, depth }: TreeNodeProps) {
       {node.isExpanded && (
         <div>
           {node.children.map((child) => (
-            <TreeNode key={child.path} node={child} depth={depth + 1} />
+            <TreeNode key={child.path} node={child} depth={depth + 1} onContextMenu={onContextMenu} />
           ))}
         </div>
       )}
@@ -140,14 +136,24 @@ function TreeNode({ node, depth }: TreeNodeProps) {
 export function Sidebar() {
   const { fileTree, rootPath, openFolder, sidebarVisible } = useEditorStore();
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
 
-  // 根据搜索关键词过滤文件树
+  // 监听内联输入事件（来自 ContextMenu 的 CustomEvent）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setInlineInput(detail);
+    };
+    window.addEventListener("sidebar:inline-input", handler);
+    return () => window.removeEventListener("sidebar:inline-input", handler);
+  }, []);
+
   const displayTree = useMemo(() => {
     if (!searchKeyword.trim()) return fileTree;
     return filterTree(fileTree, searchKeyword.trim());
   }, [fileTree, searchKeyword]);
 
-  // 搜索匹配的文件数量
   const matchCount = useMemo(() => {
     if (!searchKeyword.trim()) return 0;
     const countFiles = (nodes: FileNode[]): number => {
@@ -158,6 +164,35 @@ export function Sidebar() {
     };
     return countFiles(displayTree);
   }, [searchKeyword, displayTree]);
+
+  /** 右键菜单处理 */
+  const handleContextMenu = useCallback((e: React.MouseEvent, node?: FileNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let containerPath: string | null = null;
+    let targetNode: FileNode | null = null;
+
+    if (node) {
+      targetNode = node;
+      containerPath = node.type === "folder" ? node.path : node.path.substring(0, node.path.lastIndexOf("/"));
+    } else {
+      // 右键空白区域
+      containerPath = rootPath;
+    }
+
+    setContextMenu({ x: e.clientX, y: e.clientY, targetNode, containerPath });
+  }, [rootPath]);
+
+  /** 关闭右键菜单 */
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  /** 内联输入完成后关闭 */
+  const closeInlineInput = useCallback(() => {
+    setInlineInput(null);
+  }, []);
 
   if (!sidebarVisible) return null;
 
@@ -221,7 +256,10 @@ export function Sidebar() {
       )}
 
       {/* 文件树 */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div
+        className="flex-1 overflow-y-auto py-1"
+        onContextMenu={(e) => handleContextMenu(e)}
+      >
         {!rootPath ? (
           <div className="flex flex-col items-center justify-center h-full text-feishu-text-placeholder text-sm px-4 text-center">
             <Folder size={32} className="mb-2 opacity-40" />
@@ -239,11 +277,26 @@ export function Sidebar() {
             <p>文件夹为空</p>
           </div>
         ) : (
-          displayTree.map((node) => (
-            <TreeNode key={node.path} node={node} depth={0} />
-          ))
+          <>
+            {/* 内联输入（插入到文件树顶部或对应位置） */}
+            {inlineInput && (
+              <InlineInput
+                state={inlineInput}
+                onCancel={closeInlineInput}
+                depth={0}
+              />
+            )}
+            {displayTree.map((node) => (
+              <TreeNode key={node.path} node={node} depth={0} onContextMenu={handleContextMenu} />
+            ))}
+          </>
         )}
       </div>
+
+      {/* 右键菜单 */}
+      {contextMenu && (
+        <ContextMenu state={contextMenu} onClose={closeContextMenu} />
+      )}
     </aside>
   );
 }

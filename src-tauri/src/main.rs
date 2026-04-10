@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    lark_local_lib::run()
+    inkdoc_lib::run()
 }

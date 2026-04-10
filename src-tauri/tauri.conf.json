@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickel-org/json-schema-store/main/tauri.schema.json",
-  "productName": "MyDoc",
+  "productName": "InkDoc",
   "version": "0.1.0",
-  "identifier": "com.mydoc.app",
+  "identifier": "com.inkdoc.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,13 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "MyDoc",
+        "title": "InkDoc",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
-        "fullscreen": false,
+        "maximized": true,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true

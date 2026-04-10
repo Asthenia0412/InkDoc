@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Crepe } from "@milkdown/crepe";
+import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import { useEditorStore } from "@/stores/editor";
@@ -33,6 +33,11 @@ export function MarkdownView() {
     const crepe = new Crepe({
       root,
       defaultValue: content,
+      // 禁用会导致滚动到顶部的功能
+      features: {
+        [CrepeFeature.TopBar]: false,      // 禁用顶部浮动工具栏（会导致滚动到顶部）
+        [CrepeFeature.BlockEdit]: false,   // 禁用块编辑浮动菜单
+      },
     });
 
     crepe.create().then(() => {
@@ -111,11 +116,6 @@ export function MarkdownView() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* 顶部提示栏 */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-[#dee0e3] bg-[#fafafa] shrink-0">
-        <span className="text-[12px] text-[#8f959e]">所见即所得编辑</span>
-        <span className="text-[12px] text-[#c0c4cc]">⌘S 保存</span>
-      </div>
       {/* 编辑器容器 */}
       <div className="flex-1 overflow-y-auto">
         <div

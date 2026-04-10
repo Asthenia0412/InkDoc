@@ -1,12 +1,12 @@
 [package]
-name = "lark-local"
+name = "inkdoc"
 version = "0.1.0"
-description = "A Feishu-style local Markdown editor"
+description = "A minimalist local Markdown editor with Feishu-style rendering"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "lark_local_lib"
+name = "inkdoc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

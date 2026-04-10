@@ -1567,6 +1567,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "inkdoc"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "pulldown-cmark",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tokio",
+]
+
+[[package]]
 name = "inotify"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1750,21 +1765,6 @@ dependencies = [
  "html5ever 0.29.1",
  "indexmap 2.14.0",
  "selectors 0.24.0",
-]
-
-[[package]]
-name = "lark-local"
-version = "0.1.0"
-dependencies = [
- "notify",
- "pulldown-cmark",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tokio",
 ]
 
 [[package]]

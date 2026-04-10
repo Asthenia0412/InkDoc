@@ -1,12 +1,15 @@
+import { useEffect } from "react";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { MarkdownView } from "@/components/MarkdownView";
 import { useEditorStore } from "@/stores/editor";
 
+const STORAGE_KEY_LAST_FOLDER = "mydoc:last-folder";
+
 /** 顶部标题栏（macOS 风格） */
 function TitleBar() {
   const { currentFilePath, toggleSidebar, sidebarVisible } = useEditorStore();
-  const fileName = currentFilePath?.split("/").pop() || "Lark Local";
+  const fileName = currentFilePath?.split("/").pop() || "InkDoc";
 
   return (
     <header
@@ -42,7 +45,35 @@ function TitleBar() {
 
 /** 主应用组件 */
 export default function App() {
-  const { error } = useEditorStore();
+  const { error, rootPath, openFolder } = useEditorStore();
+
+  // 启动时：恢复上次文件夹 或 自动弹出选择
+  useEffect(() => {
+    if (rootPath) return; // 已经打开过文件夹
+
+    const lastFolder = localStorage.getItem(STORAGE_KEY_LAST_FOLDER);
+
+    if (lastFolder) {
+      // 有记录，直接打开
+      openFolder(lastFolder);
+    } else {
+      // 首次使用，自动弹出文件夹选择
+      (async () => {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({ directory: true, multiple: false });
+        if (selected) {
+          openFolder(selected as string);
+        }
+      })();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 每次打开新文件夹时，记住路径
+  useEffect(() => {
+    if (rootPath) {
+      localStorage.setItem(STORAGE_KEY_LAST_FOLDER, rootPath);
+    }
+  }, [rootPath]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#f5f6f7]">
