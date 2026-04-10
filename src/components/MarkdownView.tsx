@@ -1,16 +1,44 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import { useEditorStore } from "@/stores/editor";
+import { Outline } from "@/components/Outline";
+import { SearchReplacePanel } from "@/components/SearchReplace";
+
+/** 检测文本是否包含 Markdown 语法 */
+function isMarkdownContent(text: string): boolean {
+  const lines = text.split("\n");
+  let score = 0;
+  for (const line of lines) {
+    if (/^#{1,6}\s/.test(line)) score++;          // 标题
+    if (/^[-*+]\s/.test(line)) score++;             // 无序列表
+    if (/^\d+\.\s/.test(line)) score++;             // 有序列表
+    if (/^>\s/.test(line)) score++;                 // 引用
+    if (/^```/.test(line)) score++;                 // 代码块
+    if (/^\|/.test(line)) score++;                  // 表格
+    if (/^-{3,}$/.test(line.trim())) score++;       // 分割线
+    if (/\*\*[^*]+\*\*/.test(line)) score++;        // 粗体
+    if (/\*[^*]+\*/.test(line)) score++;            // 斜体
+    if (/\[.+\]\(.+\)/.test(line)) score++;        // 链接
+    if (/!\[.+\]\(.+\)/.test(line)) score++;       // 图片
+    if (/`[^`]+`/.test(line)) score++;              // 行内代码
+    if (/^- \[[ x]\]/.test(line)) score++;          // 任务列表
+    if (/^\s{2,}\S/.test(line)) score++;            // 缩进（可能是列表嵌套）
+  }
+  // 至少包含 2 个 Markdown 特征才认为是 Markdown
+  return score >= 2;
+}
 
 /** Milkdown 所见即所得编辑器（飞书风格） */
 export function MarkdownView() {
   const { markdownContent, currentFilePath, updateMarkdown, saveCurrentFile } = useEditorStore();
   const editorRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markdownContentRef = useRef(markdownContent);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // 保持 markdownContent 的 ref 同步（避免闭包陷阱）
   useEffect(() => {
@@ -47,6 +75,9 @@ export function MarkdownView() {
       const dom = root.querySelector(".ProseMirror");
       if (dom) {
         dom.addEventListener("input", handleEditorInput);
+
+        // 粘贴 Markdown 自动渲染
+        dom.addEventListener("paste", handlePaste as EventListener);
       }
     });
 
@@ -62,11 +93,55 @@ export function MarkdownView() {
       }, 1000);
     };
 
+    // 粘贴 Markdown 内容自动解析渲染
+    const handlePaste = (e: ClipboardEvent) => {
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
+
+      const text = clipboardData.getData("text/plain");
+      const html = clipboardData.getData("text/html");
+
+      // 如果有 HTML（从浏览器/其他富文本编辑器复制），让默认行为处理
+      if (html && html.trim()) return;
+
+      // 检测是否为 Markdown 内容（包含常见 Markdown 语法）
+      if (!isMarkdownContent(text)) return;
+
+      // 阻止默认粘贴行为
+      e.preventDefault();
+
+      // 获取当前编辑器内容，在光标位置插入 Markdown 后重新解析
+      if (!crepeRef.current) return;
+
+      // 通过 ProseMirror 的 dispatch 插入解析后的 Markdown
+      const view = (crepeRef.current as any).editor?.view;
+      if (view) {
+        // 使用 Milkdown 的 parser 解析 Markdown 并插入
+        const parser = (crepeRef.current as any).editor?.context?.parser;
+        if (parser) {
+          try {
+            const slice = parser(text);
+            if (slice) {
+              const tr = view.state.tr.replaceSelection(slice);
+              view.dispatch(tr);
+              return;
+            }
+          } catch {
+            // 解析失败，回退到纯文本
+          }
+        }
+      }
+
+      // 回退：直接用 insertText 插入（不会渲染，但至少不丢内容）
+      document.execCommand("insertText", false, text);
+    };
+
     return () => {
       const dom = root.querySelector(".ProseMirror");
       if (dom) {
-        dom.removeEventListener("input", handleEditorInput);
-      }
+          dom.removeEventListener("input", handleEditorInput);
+          dom.removeEventListener("paste", handlePaste as EventListener);
+        }
       if (crepeRef.current) {
         crepeRef.current.destroy();
         crepeRef.current = null;
@@ -74,7 +149,7 @@ export function MarkdownView() {
     };
   }, [currentFilePath]); // 文件切换时重建编辑器
 
-  // Cmd+S 保存
+  // Cmd+S 保存 + Cmd+F 搜索
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -83,6 +158,10 @@ export function MarkdownView() {
           updateMarkdown(crepeRef.current.getMarkdown());
         }
         saveCurrentFile();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -115,12 +194,23 @@ export function MarkdownView() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 编辑器容器 */}
-      <div className="flex-1 overflow-y-auto">
+    <div className="h-full flex">
+      {/* 左侧大纲 — key 绑定文件路径，切换文件时重新挂载 */}
+      <Outline
+        key={currentFilePath}
+        scrollContainerRef={scrollContainerRef}
+        editorRootRef={editorRef}
+      />
+
+      {/* 右侧编辑区 */}
+      <div className="flex-1 overflow-y-auto relative" ref={scrollContainerRef}>
+        {/* 搜索替换面板 */}
+        {searchOpen && (
+          <SearchReplacePanel onClose={() => setSearchOpen(false)} />
+        )}
         <div
           ref={editorRef}
-          className="milkdown-editor max-w-[750px] mx-auto px-4 py-8 min-h-full"
+          className="milkdown-editor max-w-[750px] mx-auto px-6 py-8 min-h-full"
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeft, Settings } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { MarkdownView } from "@/components/MarkdownView";
 import { SettingsPanel, getAutoPushSettings } from "@/components/SettingsPanel";
+import { useAutoUpdater, UpdateBanner } from "@/components/UpdateBanner";
 import { useEditorStore } from "@/stores/editor";
 import { gitAutoPush } from "@/lib/tauri-api";
 
@@ -52,6 +53,7 @@ export default function App() {
   const { error, rootPath, openFolder } = useEditorStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const autoPushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { state: updateState, checkForUpdate, downloadAndInstall, dismiss: dismissUpdate } = useAutoUpdater();
 
   // 启动时：恢复上次文件夹 或 自动弹出选择
   useEffect(() => {
@@ -71,6 +73,12 @@ export default function App() {
       })();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 启动后检查更新（延迟 3 秒）
+  useEffect(() => {
+    const timer = setTimeout(checkForUpdate, 3000);
+    return () => clearTimeout(timer);
+  }, [checkForUpdate]);
 
   // 记住上次文件夹
   useEffect(() => {
@@ -131,6 +139,13 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
         />
       )}
+
+      {/* 自动更新提示 */}
+      <UpdateBanner
+        state={updateState}
+        onDownload={downloadAndInstall}
+        onDismiss={dismissUpdate}
+      />
     </div>
   );
 }
