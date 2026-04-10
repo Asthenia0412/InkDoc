@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { Code, Eye } from "lucide-react";
+import { Code, Eye, X } from "lucide-react";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import { useEditorStore } from "@/stores/editor";
 import { Outline } from "@/components/Outline";
 import { SearchReplacePanel } from "@/components/SearchReplace";
+import { readImageAsDataUrl } from "@/lib/tauri-api";
 
 /** 检测文本是否包含 Markdown 语法 */
 function isMarkdownContent(text: string): boolean {
@@ -32,28 +32,89 @@ function isMarkdownContent(text: string): boolean {
   return score >= 2;
 }
 
-/** 将编辑器中相对路径的图片转为 asset:// 协议的绝对路径 */
-function fixRelativeImagePaths(editorDom: Element) {
+/** 预处理 Markdown：将相对路径图片替换为 base64 data URL */
+async function resolveImagePathsInMarkdown(markdown: string, currentFilePath: string): Promise<string> {
+  const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf("/"));
+  const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+
+  const matches: { full: string; alt: string; src: string; index: number }[] = [];
+  let match;
+  while ((match = imgRegex.exec(markdown)) !== null) {
+    const src = match[2];
+    // 跳过非文件路径
+    if (src.startsWith("http://") || src.startsWith("https://") ||
+        src.startsWith("data:") || src.startsWith("/") ||
+        src.startsWith("blob:") || src.startsWith("file://")) {
+      continue;
+    }
+    // 只处理有图片扩展名的路径
+    if (!/\.(png|jpe?g|gif|svg|webp|bmp|ico|tiff?)$/i.test(src)) {
+      continue;
+    }
+    matches.push({ full: match[0], alt: match[1], src, index: match.index });
+  }
+
+  if (matches.length === 0) return markdown;
+
+  // 并行读取所有图片
+  const results = await Promise.allSettled(
+    matches.map(async (m) => {
+      const absolutePath = (dir + "/" + m.src)
+        .split("/")
+        .reduce((acc: string[], part) => {
+          if (part === "..") acc.pop();
+          else if (part !== ".") acc.push(part);
+          return acc;
+        }, [])
+        .join("/");
+      const dataUrl = await readImageAsDataUrl(absolutePath);
+      return { ...m, dataUrl };
+    })
+  );
+
+  // 从后往前替换（避免索引偏移）
+  let result = markdown;
+  const resolved = results
+    .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .sort((a, b) => b.index - a.index);
+
+  for (const { full, alt, dataUrl } of resolved) {
+    result = result.replace(full, `![${alt}](${dataUrl})`);
+  }
+
+  return result;
+}
+
+/** 将编辑器中相对路径的图片转为 base64 data URL（通过 Rust 读取文件） */
+async function fixRelativeImagePaths(editorDom: Element) {
   const filePath = useEditorStore.getState().currentFilePath;
   if (!filePath) return;
 
-  // 当前文件所在目录
   const dir = filePath.substring(0, filePath.lastIndexOf("/"));
 
   const images = editorDom.querySelectorAll("img[src]");
+  const promises: Promise<void>[] = [];
+
   images.forEach((img) => {
     const src = img.getAttribute("src");
     if (!src) return;
 
-    // 已经是绝对路径或 http(s) 或 asset:// 协议，跳过
-    if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("asset://") || src.startsWith("data:") || src.startsWith("/")) {
+    // 跳过非文件路径
+    if (src.startsWith("http://") || src.startsWith("https://") ||
+        src.startsWith("asset://") || src.startsWith("data:") ||
+        src.startsWith("blob:") || src.startsWith("/") ||
+        src.startsWith("file://")) {
       return;
     }
 
-    // 相对路径 → 拼接为绝对路径 → 转为 asset:// URL
-    const absolutePath = dir + "/" + src;
-    // 规范化路径（处理 ./ 和 ../）
-    const normalized = absolutePath
+    // 只处理有图片扩展名的路径
+    if (!/\.(png|jpe?g|gif|svg|webp|bmp|ico|tiff?)$/i.test(src)) {
+      return;
+    }
+
+    // 拼接绝对路径并规范化
+    const absolutePath = (dir + "/" + src)
       .split("/")
       .reduce((acc: string[], part) => {
         if (part === "..") acc.pop();
@@ -62,40 +123,24 @@ function fixRelativeImagePaths(editorDom: Element) {
       }, [])
       .join("/");
 
-    try {
-      // 对路径中的每个 segment 分别编码（保留 / 分隔符）
-      const encoded = normalized
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/");
-      const assetUrl = convertFileSrc(encoded);
-      img.setAttribute("src", assetUrl);
-    } catch {
-      // 转换失败，保持原样
-    }
+    // 异步读取图片为 base64
+    const p = readImageAsDataUrl(absolutePath)
+      .then((dataUrl) => {
+        img.setAttribute("src", dataUrl);
+      })
+      .catch(() => {
+        // 文件不存在，保持原样
+      });
+
+    promises.push(p);
   });
 
-  // 监听 DOM 变化，新插入的图片也需要转换
-  const observer = new MutationObserver((mutations) => {
-    let hasNewImages = false;
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node instanceof HTMLImageElement) hasNewImages = true;
-        if (node instanceof Element && node.querySelector("img")) hasNewImages = true;
-      }
-    }
-    if (hasNewImages) {
-      // 延迟执行，等 ProseMirror 完成渲染
-      setTimeout(() => fixRelativeImagePaths(editorDom), 100);
-    }
-  });
-
-  observer.observe(editorDom, { childList: true, subtree: true });
+  await Promise.all(promises);
 }
 
 /** Milkdown 所见即所得编辑器（飞书风格） */
 export function MarkdownView() {
-  const { markdownContent, currentFilePath, updateMarkdown, saveCurrentFile } = useEditorStore();
+  const { markdownContent, currentFilePath, updateMarkdown, saveCurrentFile, previewImagePath, setPreviewImage } = useEditorStore();
   const editorRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const crepeRef = useRef<Crepe | null>(null);
@@ -105,12 +150,24 @@ export function MarkdownView() {
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceText, setSourceText] = useState("");
   const [rebuildTrigger, setRebuildTrigger] = useState(0);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const sourceSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 保持 markdownContent 的 ref 同步（避免闭包陷阱）
   useEffect(() => {
     markdownContentRef.current = markdownContent;
   }, [markdownContent]);
+
+  // 加载图片预览
+  useEffect(() => {
+    if (!previewImagePath) {
+      setPreviewDataUrl(null);
+      return;
+    }
+    readImageAsDataUrl(previewImagePath)
+      .then(setPreviewDataUrl)
+      .catch(() => setPreviewDataUrl(null));
+  }, [previewImagePath]);
 
   // 初始化 / 重建编辑器：当 currentFilePath 变化时重建
   useEffect(() => {
@@ -304,6 +361,33 @@ export function MarkdownView() {
 
       {/* 右侧编辑区 */}
       <div className="flex-1 relative">
+        {/* 图片预览 */}
+        {previewImagePath && (
+          <div className="absolute inset-0 z-40 bg-[#f5f6f7] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#dee0e3] bg-white">
+              <span className="text-[13px] text-[#1f2329] truncate flex-1">
+                {previewImagePath.split("/").pop()}
+              </span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded hover:bg-[#f0f1f2] transition-colors"
+              >
+                <X size={16} className="text-[#8f959e]" />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center p-8 overflow-auto">
+              {previewDataUrl ? (
+                <img
+                  src={previewDataUrl}
+                  alt={previewImagePath.split("/").pop()}
+                  className="max-w-full max-h-full object-contain rounded shadow-lg"
+                />
+              ) : (
+                <div className="text-[#8f959e] text-sm">加载中...</div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="h-full overflow-y-auto" ref={scrollContainerRef}>
           {/* 搜索替换面板 */}
           {searchOpen && (

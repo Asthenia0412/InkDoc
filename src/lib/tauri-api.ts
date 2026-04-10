@@ -66,6 +66,11 @@ export async function gitAutoPush(dirPath: string, commitMessage: string): Promi
   return invoke<string>("git_auto_push", { dirPath, commitMessage });
 }
 
+/** 读取图片文件为 base64 data URL */
+export async function readImageAsDataUrl(filePath: string): Promise<string> {
+  return invoke<string>("read_image_as_data_url", { filePath });
+}
+
 /** 监听文件变更事件 */
 export async function onFileChange(
   callback: (event: { path: string; kind: string }) => void,

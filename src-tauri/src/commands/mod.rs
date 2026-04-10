@@ -193,3 +193,37 @@ pub fn get_git_info(dir_path: String) -> Result<serde_json::Value, String> {
 pub fn git_auto_push(dir_path: String, commit_message: String) -> Result<String, String> {
     git::auto_commit_push(&dir_path, &commit_message)
 }
+
+/// 读取图片文件并返回 base64 data URL
+#[tauri::command]
+pub fn read_image_as_data_url(file_path: String) -> Result<String, String> {
+    use std::fs;
+    use base64::Engine;
+
+    let path = std::path::Path::new(&file_path);
+
+    // 检查文件是否存在
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // 根据扩展名确定 MIME 类型
+    let mime = match path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("svg") => "image/svg+xml",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
+        _ => "image/png", // 默认
+    };
+
+    // 读取文件内容
+    let data = fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // 编码为 base64
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}

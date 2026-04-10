@@ -40,6 +40,12 @@ function isMarkdownFile(node: FileNode): boolean {
   return ext === "md" || ext === "markdown" || ext === "mdx";
 }
 
+function isImageFile(node: FileNode): boolean {
+  if (node.type !== "file") return false;
+  const ext = node.ext?.toLowerCase();
+  return ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"].includes(ext || "");
+}
+
 /** 递归过滤文件树 */
 function filterTree(nodes: FileNode[], keyword: string): FileNode[] {
   if (!keyword) return nodes;
@@ -65,7 +71,7 @@ function filterTree(nodes: FileNode[], keyword: string): FileNode[] {
 
 /** 单个树节点 */
 function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
-  const { openFile, toggleFolder, currentFilePath } = useEditorStore();
+  const { openFile, toggleFolder, currentFilePath, setPreviewImage } = useEditorStore();
   const ref = useRef<HTMLButtonElement>(null);
 
   // 当前文件高亮时自动滚动到可见区域
@@ -80,8 +86,10 @@ function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
       toggleFolder(node.path);
     } else if (isMarkdownFile(node)) {
       openFile(node.path);
+    } else if (isImageFile(node)) {
+      setPreviewImage(node.path);
     }
-  }, [node, openFile, toggleFolder]);
+  }, [node, openFile, toggleFolder, setPreviewImage]);
 
   const isActive = node.type === "file" && node.path === currentFilePath;
 

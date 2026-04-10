@@ -1612,6 +1612,7 @@ dependencies = [
 name = "inkdoc"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "notify",
  "pulldown-cmark",
  "serde",

@@ -22,6 +22,7 @@ pub fn run() {
             commands::check_git_repo,
             commands::get_git_info,
             commands::git_auto_push,
+            commands::read_image_as_data_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

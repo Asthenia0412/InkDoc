@@ -22,6 +22,8 @@ interface EditorState {
   sidebarVisible: boolean;
   /** 是否正在保存（防止文件监听器重复加载） */
   _saving: boolean;
+  /** 图片预览路径（点击图片文件时设置） */
+  previewImagePath: string | null;
 
   // Actions
   openFolder: (path: string) => Promise<void>;
@@ -40,6 +42,7 @@ interface EditorState {
   renameFileItem: (oldPath: string, newName: string) => Promise<void>;
   ensureFolderExpanded: (folderPath: string) => void;
   revealCurrentFile: () => void;
+  setPreviewImage: (path: string | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -143,6 +146,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   /** 是否正在保存（用于防止文件监听器重复加载） */
   _saving: false,
+
+  /** 图片预览路径 */
+  previewImagePath: null,
 
   saveCurrentFile: async () => {
     const { currentFilePath, markdownContent } = get();
@@ -263,5 +269,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
     };
     set({ fileTree: expandInTree(get().fileTree) });
+  },
+
+  /** 设置图片预览路径 */
+  setPreviewImage: (path) => {
+    set({ previewImagePath: path });
   },
 }));
