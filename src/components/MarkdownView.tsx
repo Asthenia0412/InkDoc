@@ -195,11 +195,11 @@ export function MarkdownView() {
 
   return (
     <div className="h-full flex">
-      {/* 左侧大纲 — key 绑定文件路径，切换文件时重新挂载 */}
+      {/* 左侧大纲 */}
       <Outline
         key={currentFilePath}
         scrollContainerRef={scrollContainerRef}
-        editorRootRef={editorRef}
+        filePath={currentFilePath}
       />
 
       {/* 右侧编辑区 */}

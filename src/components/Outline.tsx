@@ -8,7 +8,8 @@ interface HeadingItem {
 
 interface OutlineProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  editorRootRef: React.RefObject<HTMLDivElement | null>;
+  /** 当前文件路径，用于触发重新提取 */
+  filePath: string | null;
 }
 
 function getIndent(level: number): number {
@@ -21,23 +22,11 @@ function getTextSize(level: number): string {
   return "text-[12px]";
 }
 
-/** 等待 ProseMirror DOM 出现 */
-function waitForProseMirror(root: HTMLElement, maxWait = 3000): Promise<Element | null> {
-  return new Promise((resolve) => {
-    const existing = root.querySelector(".ProseMirror");
-    if (existing) { resolve(existing); return; }
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      const el = root.querySelector(".ProseMirror");
-      if (el) { clearInterval(timer); resolve(el); }
-      else { elapsed += 50; if (elapsed >= maxWait) { clearInterval(timer); resolve(null); } }
-    }, 50);
-  });
-}
-
-/** 获取所有标题元素（实时查询，不缓存） */
-function getHeadingElements(root: HTMLElement): { el: Element; level: number; text: string; index: number }[] {
-  const els = root.querySelectorAll(".ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4");
+/** 获取所有标题元素 */
+function getHeadingElements(): { el: Element; level: number; text: string; index: number }[] {
+  const pm = document.querySelector(".ProseMirror");
+  if (!pm) return [];
+  const els = pm.querySelectorAll("h1, h2, h3, h4");
   const items: { el: Element; level: number; text: string; index: number }[] = [];
   els.forEach((el, index) => {
     const level = parseInt(el.tagName[1], 10);
@@ -47,91 +36,105 @@ function getHeadingElements(root: HTMLElement): { el: Element; level: number; te
   return items;
 }
 
-export function Outline({ scrollContainerRef, editorRootRef }: OutlineProps) {
+export function Outline({ scrollContainerRef, filePath }: OutlineProps) {
   const [headings, setHeadings] = useState<HeadingItem[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
-  // 提取标题列表（纯数据，不操作 DOM id）
+  // 提取标题列表
   const extractHeadings = useCallback(() => {
-    if (!editorRootRef.current) return;
-    const items = getHeadingElements(editorRootRef.current);
+    if (!mountedRef.current) return;
+    const items = getHeadingElements();
     setHeadings(items.map(({ level, text, index }) => ({ index, text, level })));
-  }, [editorRootRef]);
+  }, []);
 
-  // 等待编辑器就绪
+  // 等待 ProseMirror 出现后开始监听
   useEffect(() => {
-    if (!editorRootRef.current) return;
-    let cancelled = false;
+    mountedRef.current = true;
 
-    waitForProseMirror(editorRootRef.current).then((dom) => {
-      if (cancelled || !dom) return;
+    const tryStart = () => {
+      const pm = document.querySelector(".ProseMirror");
+      if (!pm) {
+        // 还没准备好，继续等
+        if (mountedRef.current) {
+          setTimeout(tryStart, 200);
+        }
+        return;
+      }
+
+      // 初始提取
       extractHeadings();
 
+      // 监听 DOM 变化
       const observer = new MutationObserver(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(extractHeadings, 300);
       });
 
-      observer.observe(dom, { childList: true, subtree: true, characterData: true });
-    });
+      observer.observe(pm, { childList: true, subtree: true, characterData: true });
+
+      // 清理
+      return () => {
+        observer.disconnect();
+      };
+    };
+
+    // 延迟启动，给 Crepe 时间初始化
+    const timer = setTimeout(tryStart, 300);
 
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
+      clearTimeout(timer);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [editorRootRef, extractHeadings]);
+  }, [filePath, extractHeadings]);
 
-  // 滚动时追踪当前标题（用 scroll 事件而非 IntersectionObserver，更可靠）
+  // 滚动追踪
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const updateActive = () => {
-      if (!editorRootRef.current) return;
-      const items = getHeadingElements(editorRootRef.current);
+      const items = getHeadingElements();
       if (items.length === 0) return;
 
       let current = 0;
+      const containerRect = container.getBoundingClientRect();
 
       for (let i = 0; i < items.length; i++) {
         const rect = items[i].el.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        // 标题在容器可视区域顶部以上
         if (rect.top - containerRect.top < 60) {
           current = i;
         } else {
           break;
         }
       }
-
       setActiveIndex(current);
     };
 
-    // 防抖滚动监听
     const onScroll = () => {
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = setTimeout(updateActive, 50);
     };
 
     container.addEventListener("scroll", onScroll, { passive: true });
-    // 初始更新
-    setTimeout(updateActive, 500);
+    setTimeout(updateActive, 800);
 
     return () => {
       container.removeEventListener("scroll", onScroll);
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     };
-  }, [scrollContainerRef, editorRootRef]);
+  }, [scrollContainerRef, filePath]);
 
-  // 点击跳转 — 实时查询 DOM，不依赖 id
+  // 点击跳转
   const handleClick = useCallback(
     (headingIndex: number) => {
       const container = scrollContainerRef.current;
-      if (!editorRootRef.current || !container) return;
+      if (!container) return;
 
-      const items = getHeadingElements(editorRootRef.current);
+      const items = getHeadingElements();
       const target = items[headingIndex];
       if (!target) return;
 
@@ -146,7 +149,7 @@ export function Outline({ scrollContainerRef, editorRootRef }: OutlineProps) {
 
       setActiveIndex(headingIndex);
     },
-    [scrollContainerRef, editorRootRef]
+    [scrollContainerRef]
   );
 
   return (
