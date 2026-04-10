@@ -95,7 +95,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   openFile: async (path: string) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, previewImagePath: null });
     try {
       const content = await readFileRaw(path);
       set({
