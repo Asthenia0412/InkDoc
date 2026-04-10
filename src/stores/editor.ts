@@ -20,6 +20,8 @@ interface EditorState {
   error: string | null;
   /** 侧边栏是否可见 */
   sidebarVisible: boolean;
+  /** 是否正在保存（防止文件监听器重复加载） */
+  _saving: boolean;
 
   // Actions
   openFolder: (path: string) => Promise<void>;
@@ -37,6 +39,7 @@ interface EditorState {
   deleteFileItem: (path: string) => Promise<void>;
   renameFileItem: (oldPath: string, newName: string) => Promise<void>;
   ensureFolderExpanded: (folderPath: string) => void;
+  revealCurrentFile: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -60,8 +63,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           const { rootPath: currentRoot } = get();
           if (currentRoot) {
             try {
-              const newTree = await readFolder(currentRoot);
-              set({ fileTree: newTree });
+              // 只在文件结构变化时刷新树（新建/删除/重命名），内容修改不刷新
+              if (event.kind !== "modified") {
+                const newTree = await readFolder(currentRoot);
+                set({ fileTree: newTree });
+              }
             } catch {
               // 静默失败
             }
@@ -72,9 +78,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           if (currentFilePath && event.path === currentFilePath && event.kind === "deleted") {
             set({ currentFilePath: null, markdownContent: "" });
           }
-          // 如果当前打开的文件被外部修改，重新加载
+          // 如果当前打开的文件被外部修改，重新加载（但跳过自身保存触发的修改）
           if (currentFilePath && event.path === currentFilePath && event.kind === "modified") {
-            get().openFile(currentFilePath);
+            if (!get()._saving) {
+              get().openFile(currentFilePath);
+            }
           }
         });
       });
@@ -131,13 +139,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateMarkdown: (content: string) => set({ markdownContent: content }),
 
+  // === 文件操作 ===
+
+  /** 是否正在保存（用于防止文件监听器重复加载） */
+  _saving: false,
+
   saveCurrentFile: async () => {
     const { currentFilePath, markdownContent } = get();
     if (!currentFilePath) return;
     try {
+      set({ _saving: true });
       await writeFile({ path: currentFilePath, content: markdownContent });
+      // 延迟重置，确保文件监听器的事件已经过去
+      setTimeout(() => set({ _saving: false }), 500);
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: String(e), _saving: false });
     }
   },
 
@@ -208,6 +224,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (node.type === "folder") {
           const shouldExpand = node.path === folderPath ||
             node.path.startsWith(folderPath + "/");
+          return {
+            ...node,
+            isExpanded: shouldExpand || node.isExpanded,
+            children: expandInTree(node.children),
+          };
+        }
+        return node;
+      });
+    };
+    set({ fileTree: expandInTree(get().fileTree) });
+  },
+
+  /** 展开文件树并定位到当前打开的文件 */
+  revealCurrentFile: () => {
+    const { currentFilePath } = get();
+    if (!currentFilePath) return;
+
+    // 提取文件路径上的所有父文件夹路径
+    const parts = currentFilePath.split("/");
+    const folderPaths: string[] = [];
+    for (let i = 1; i < parts.length - 1; i++) {
+      folderPaths.push(parts.slice(0, i + 1).join("/"));
+    }
+
+    // 展开所有父文件夹
+    const expandInTree = (nodes: FileNode[]): FileNode[] => {
+      return nodes.map((node) => {
+        if (node.type === "folder") {
+          const shouldExpand = folderPaths.includes(node.path);
           return {
             ...node,
             isExpanded: shouldExpand || node.isExpanded,

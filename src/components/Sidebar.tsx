@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo, useEffect, useRef } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Search,
   X,
+  LocateFixed,
 } from "lucide-react";
 import type { FileNode } from "@/types";
 import { useEditorStore } from "@/stores/editor";
@@ -65,6 +66,14 @@ function filterTree(nodes: FileNode[], keyword: string): FileNode[] {
 /** 单个树节点 */
 function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
   const { openFile, toggleFolder, currentFilePath } = useEditorStore();
+  const ref = useRef<HTMLButtonElement>(null);
+
+  // 当前文件高亮时自动滚动到可见区域
+  useEffect(() => {
+    if (node.type === "file" && node.path === currentFilePath && ref.current) {
+      ref.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [node.path, node.type, currentFilePath]);
 
   const handleClick = useCallback(() => {
     if (node.type === "folder") {
@@ -79,6 +88,7 @@ function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
   if (node.type === "file") {
     return (
       <button
+        ref={ref}
         onClick={handleClick}
         onContextMenu={(e) => onContextMenu(e, node)}
         className={`
@@ -134,7 +144,7 @@ function TreeNode({ node, depth, onContextMenu }: TreeNodeProps) {
 
 /** 侧边栏文件树 */
 export function Sidebar() {
-  const { fileTree, rootPath, openFolder, sidebarVisible } = useEditorStore();
+  const { fileTree, rootPath, openFolder, sidebarVisible, currentFilePath, revealCurrentFile } = useEditorStore();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
@@ -203,19 +213,29 @@ export function Sidebar() {
         <span className="text-xs font-medium text-feishu-text-secondary uppercase tracking-wider">
           {rootPath ? rootPath.split("/").pop() : "文件"}
         </span>
-        <button
-          onClick={async () => {
-            const { open } = await import("@tauri-apps/plugin-dialog");
-            const selected = await open({ directory: true, multiple: false });
-            if (selected) {
-              openFolder(selected as string);
-            }
-          }}
-          className="p-1 rounded hover:bg-feishu-hover transition-colors"
-          title="打开文件夹"
-        >
-          <FolderOpen size={16} className="text-feishu-text-secondary" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={revealCurrentFile}
+            disabled={!currentFilePath}
+            className="p-1 rounded hover:bg-feishu-hover transition-colors disabled:opacity-30"
+            title="定位当前文件"
+          >
+            <LocateFixed size={16} className="text-feishu-text-secondary" />
+          </button>
+          <button
+            onClick={async () => {
+              const { open } = await import("@tauri-apps/plugin-dialog");
+              const selected = await open({ directory: true, multiple: false });
+              if (selected) {
+                openFolder(selected as string);
+              }
+            }}
+            className="p-1 rounded hover:bg-feishu-hover transition-colors"
+            title="打开文件夹"
+          >
+            <FolderOpen size={16} className="text-feishu-text-secondary" />
+          </button>
+        </div>
       </div>
 
       {/* 搜索框 */}
